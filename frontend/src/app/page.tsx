@@ -184,7 +184,7 @@ export default function MainApp() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-12">
+                  <div className="text-center py-12 pt-24">
                     <div className="bg-[#F8F6F0] p-6 md:p-8 rounded-lg border border-[#E5E7EB] max-w-md mx-auto">
                       <p className="text-base md:text-lg text-[#6B7280] mb-6">No ships available yet</p>
                       <button
@@ -274,8 +274,8 @@ export default function MainApp() {
           )}
 
           {activeTab === 'create' && (
-            <div className="max-w-2xl mx-auto">
-              <h2 className="text-2xl font-bold mb-4 text-[#0A2463]">Create Collection</h2>
+            <div className="max-w-2xl mx-auto py-4">
+              <h2 className="text-2xl font-bold py-4 mb-4 text-[#0A2463]">Create Collection</h2>
               <form onSubmit={handleCreateCollection} className="bg-[#F8F6F0] p-6 rounded-lg shadow space-y-4 border border-[#E5E7EB]">
                 <div>
                   <label className="block text-sm font-medium mb-2">Collection Name</label>

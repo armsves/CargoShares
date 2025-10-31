@@ -317,7 +317,23 @@ export const NFT_COLLECTION_ABI = [
   },
 ] as const;
 
-// Contract addresses - Updated factory address (fixed version)
+// Network-aware contract addresses
+export function getContractAddresses(chainId?: number) {
+  // Hedera Testnet (296) and Mainnet (295)
+  if (chainId === 296 || chainId === 295) {
+    return HEDERA_TESTNET_ADDRESSES;
+  }
+
+  // Flow Testnet (545) and Mainnet (747)
+  if (chainId === 545 || chainId === 747) {
+    return FLOW_TESTNET_ADDRESSES;
+  }
+
+  // Default to Hedera Testnet
+  return HEDERA_TESTNET_ADDRESSES;
+}
+
+// Legacy export for backward compatibility - will be deprecated
 export const CONTRACT_ADDRESSES = {
   NFT_COLLECTION_FACTORY: process.env.NEXT_PUBLIC_NFT_FACTORY_ADDRESS || '0x5A8Db7Fd59fCa724385651f7dBa78E1D68C456A6',
   NFT_MARKETPLACE: process.env.NEXT_PUBLIC_MARKETPLACE_ADDRESS || '0x483a5ACdb48Ad9036Bff3B1cf71b71D32Bc40257',
@@ -332,8 +348,8 @@ export const HEDERA_TESTNET_ADDRESSES = {
 
 // Deployed addresses for Flow Testnet
 export const FLOW_TESTNET_ADDRESSES = {
-  NFT_COLLECTION_FACTORY: '0x05dCF4c39434A5db089B77DB05354ce10883623F' as `0x${string}`,
-  NFT_MARKETPLACE: '0x344aAE20E192aEa4Da6984244c18e0Eb8fD163b6' as `0x${string}`,
-  COLLECTION_VAULT_FACTORY: '0x254C87dBF608b7Ddeed245Cd123F75a68caB2d78' as `0x${string}`,
+  NFT_COLLECTION_FACTORY: '0x365B0E89f4b01D72Dd4FF54093801463738bd275' as `0x${string}`,
+  NFT_MARKETPLACE: '0x8703A0AE3F1Ffc843ae90eE2021f62A27471d47C' as `0x${string}`,
+  COLLECTION_VAULT_FACTORY: '0x0a662224fDAE523F85037A0f288aD6cf681E939D' as `0x${string}`,
 } as const;
 

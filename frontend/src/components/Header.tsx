@@ -45,7 +45,7 @@ export function Header() {
         </div>
 
         {/* Center: Navigation Links */}
-        <div className="hidden md:flex items-center gap-8 flex-1 justify-center">
+        <div className="hidden md:flex items-center text-white gap-8 flex-1 justify-center">
           <a
             href="#marketplace"
             className="text-white hover:text-[#D4AF37] transition-colors font-medium text-base"
@@ -75,7 +75,7 @@ export function Header() {
         {/* Right: Wallet Connect Button */}
         <div className="flex items-center gap-4">
           <div className="hidden md:block">
-            <div className="[&_button]:rounded-lg [&_button]:hover:bg-[#D4AF37]/10 [&_button]:transition-all">
+            <div className="[&_button]:rounded-lg [&_button]:hover:bg-[#D4AF37]/10 [&_button]:transition-all text-white">
               <ConnectButton />
             </div>
           </div>

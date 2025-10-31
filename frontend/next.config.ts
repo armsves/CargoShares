@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     formats: ['image/avif', 'image/webp'],
     remotePatterns: [],
   },
+  devIndicators: false
 };
 
 export default nextConfig;

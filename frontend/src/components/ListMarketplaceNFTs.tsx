@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useReadContract } from 'wagmi'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useReadContract, useChainId } from 'wagmi'
 import { useCollectionsCount, useCollection, useBuyNFT } from '@/hooks/useContracts'
-import { CONTRACT_ADDRESSES, NFT_COLLECTION_ABI, NFT_MARKETPLACE_ABI } from '@/config/contracts'
+import { getContractAddresses, NFT_COLLECTION_ABI, NFT_MARKETPLACE_ABI } from '@/config/contracts'
 import { parseEther, decodeEventLog, formatEther } from 'viem'
 
 interface MarketplaceNFT {
@@ -25,13 +25,16 @@ export function ListMarketplaceNFTs() {
   const [batchListHash, setBatchListHash] = useState<`0x${string}` | null>(null)
   
   const publicClient = usePublicClient()
+  const chainId = useChainId()
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
   const isWaiting = isConfirming
   
+  const contractAddresses = getContractAddresses(chainId)
+
   // Get default listing price from factory
   const { data: defaultListingPrice } = useReadContract({
-    address: CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY as `0x${string}`,
+    address: contractAddresses.NFT_COLLECTION_FACTORY,
     abi: [
       {
         inputs: [],
@@ -46,7 +49,7 @@ export function ListMarketplaceNFTs() {
 
   // Check if user is marketplace owner
   const { data: marketplaceOwner } = useReadContract({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+    address: contractAddresses.NFT_MARKETPLACE,
     abi: NFT_MARKETPLACE_ABI,
     functionName: 'owner',
   })
@@ -83,32 +86,69 @@ export function ListMarketplaceNFTs() {
       let eventBasedFound = false
       try {
         const currentBlock = await publicClient.getBlockNumber()
-        const fromBlock = currentBlock - BigInt(100000) // Last 100k blocks
-        
+        // Use a much smaller block range for Flow testnet (limited to ~10k blocks)
+        const maxBlocks = chainId === 545 ? BigInt(5000) : BigInt(50000) // 5k for Flow, 50k for others
+        const fromBlock = currentBlock > maxBlocks ? currentBlock - maxBlocks : BigInt(0)
+
         console.log('Fetching Transfer events for collection:', collectionAddress)
-        console.log('Marketplace address:', CONTRACT_ADDRESSES.NFT_MARKETPLACE)
-        
+        console.log('Chain ID:', chainId)
+        console.log('Marketplace address:', contractAddresses.NFT_MARKETPLACE)
+        console.log('Block range:', fromBlock.toString(), 'to latest (max', maxBlocks.toString(), 'blocks)')
+
         // Get Transfer events where marketplace received NFTs
         // Use topics for filtering since 'to' is indexed
-        const marketplaceAddress = CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`
+        const marketplaceAddress = contractAddresses.NFT_MARKETPLACE
         const marketplaceAddressLower = marketplaceAddress.toLowerCase()
-        const transferLogs = await publicClient.getLogs({
-          address: collectionAddress,
-          event: {
-            type: 'event',
-            name: 'Transfer',
-            inputs: [
-              { indexed: true, name: 'from', type: 'address' },
-              { indexed: true, name: 'to', type: 'address' },
-              { indexed: true, name: 'tokenId', type: 'uint256' },
-            ],
-          },
-          fromBlock: fromBlock > BigInt(0) ? fromBlock : BigInt(0),
-          toBlock: 'latest',
-          args: {
-            to: marketplaceAddress,
-          },
-        })
+
+        let transferLogs: any[] = []
+        try {
+          transferLogs = await publicClient.getLogs({
+            address: collectionAddress,
+            event: {
+              type: 'event',
+              name: 'Transfer',
+              inputs: [
+                { indexed: true, name: 'from', type: 'address' },
+                { indexed: true, name: 'to', type: 'address' },
+                { indexed: true, name: 'tokenId', type: 'uint256' },
+              ],
+            },
+            fromBlock: fromBlock,
+            toBlock: 'latest',
+            args: {
+              to: marketplaceAddress,
+            },
+          })
+        } catch (error: any) {
+          console.warn('Failed to fetch Transfer events in one request:', error.message)
+          // If the range is too large, try with an even smaller range
+          if (error.message?.includes('limited to') || error.message?.includes('413')) {
+            const smallerFromBlock = currentBlock > BigInt(2000) ? currentBlock - BigInt(2000) : BigInt(0)
+            console.log('Retrying with smaller block range:', smallerFromBlock.toString(), 'to latest')
+            try {
+              transferLogs = await publicClient.getLogs({
+                address: collectionAddress,
+                event: {
+                  type: 'event',
+                  name: 'Transfer',
+                  inputs: [
+                    { indexed: true, name: 'from', type: 'address' },
+                    { indexed: true, name: 'to', type: 'address' },
+                    { indexed: true, name: 'tokenId', type: 'uint256' },
+                  ],
+                },
+                fromBlock: smallerFromBlock,
+                toBlock: 'latest',
+                args: {
+                  to: marketplaceAddress,
+                },
+              })
+            } catch (retryError: any) {
+              console.warn('Retry also failed:', retryError.message)
+              transferLogs = []
+            }
+          }
+        }
         
         console.log(`Found ${transferLogs.length} Transfer events to marketplace`)
         
@@ -165,29 +205,24 @@ export function ListMarketplaceNFTs() {
             
             try {
               const calls = batch.map((tokenId) => ({
-                address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+                address: contractAddresses.NFT_MARKETPLACE,
                 abi: NFT_MARKETPLACE_ABI,
                 functionName: 'getListing',
                 args: [collectionAddress, tokenId],
               }))
-              
+
               let results: Array<{ status: 'success' | 'failure'; result?: unknown; error?: unknown }>
-              try {
-                results = await publicClient.multicall({ contracts: calls })
-              } catch (multicallErr: unknown) {
-                // If multicall fails (e.g., chain doesn't support it), fall back to individual calls
-                const errorMessage = multicallErr instanceof Error ? multicallErr.message : String(multicallErr)
-                console.warn('Multicall failed, using individual calls:', errorMessage)
+
+              // Skip multicall for Flow testnet (chainId 545) as it doesn't support it
+              if (chainId === 545) {
                 results = []
-                
-                // Call each contract individually with delays
                 for (let j = 0; j < batch.length; j++) {
                   if (j > 0) {
-                    await delay(100) // Small delay between individual calls
+                    await delay(100)
                   }
                   try {
                     const result = await publicClient.readContract({
-                      address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+                      address: contractAddresses.NFT_MARKETPLACE,
                       abi: NFT_MARKETPLACE_ABI,
                       functionName: 'getListing',
                       args: [collectionAddress, batch[j]],
@@ -197,8 +232,35 @@ export function ListMarketplaceNFTs() {
                     results.push({ status: 'failure' as const, error: err })
                   }
                 }
+              } else {
+                try {
+                  results = await publicClient.multicall({ contracts: calls })
+                } catch (multicallErr: unknown) {
+                  // If multicall fails (e.g., chain doesn't support it), fall back to individual calls
+                  const errorMessage = multicallErr instanceof Error ? multicallErr.message : String(multicallErr)
+                  console.warn('Multicall failed, using individual calls:', errorMessage)
+                  results = []
+
+                  // Call each contract individually with delays
+                for (let j = 0; j < batch.length; j++) {
+                  if (j > 0) {
+                    await delay(100) // Small delay between individual calls
+                  }
+                  try {
+                    const result = await publicClient.readContract({
+                      address: contractAddresses.NFT_MARKETPLACE,
+                      abi: NFT_MARKETPLACE_ABI,
+                      functionName: 'getListing',
+                      args: [collectionAddress, batch[j]],
+                    })
+                    results.push({ status: 'success' as const, result })
+                  } catch (err) {
+                    results.push({ status: 'failure' as const, error: err })
+                  }
+                }
+                }
               }
-              
+
               results.forEach((result, index) => {
                 if (result.status === 'success' && result.result) {
                   // getListing returns a struct object: { seller, paymentToken, price, isActive }
@@ -283,16 +345,13 @@ export function ListMarketplaceNFTs() {
                 functionName: 'ownerOf',
                 args: [BigInt(tokenId)],
               }))
-              
+
               let results: Array<{ status: 'success' | 'failure'; result?: unknown; error?: unknown }>
-              try {
-                results = await publicClient.multicall({ contracts: calls })
-              } catch (multicallErr: unknown) {
-                // If multicall fails, fall back to individual calls
-                const errorMessage = multicallErr instanceof Error ? multicallErr.message : String(multicallErr)
-                console.warn('Multicall failed, using individual calls:', errorMessage)
+
+              // Skip multicall for Flow testnet (chainId 545) as it doesn't support it
+              if (chainId === 545) {
+                console.log('Skipping multicall for Flow testnet, using individual calls')
                 results = []
-                
                 for (let j = 0; j < batch.length; j++) {
                   if (j > 0) {
                     await delay(100)
@@ -309,12 +368,38 @@ export function ListMarketplaceNFTs() {
                     results.push({ status: 'failure' as const, error: err })
                   }
                 }
+              } else {
+                try {
+                  results = await publicClient.multicall({ contracts: calls })
+                } catch (multicallErr: unknown) {
+                  // If multicall fails, fall back to individual calls
+                  const errorMessage = multicallErr instanceof Error ? multicallErr.message : String(multicallErr)
+                  console.warn('Multicall failed, using individual calls:', errorMessage)
+                  results = []
+
+                  for (let j = 0; j < batch.length; j++) {
+                    if (j > 0) {
+                      await delay(100)
+                    }
+                    try {
+                      const result = await publicClient.readContract({
+                        address: collectionAddress,
+                        abi: NFT_COLLECTION_ABI,
+                        functionName: 'ownerOf',
+                        args: [BigInt(batch[j])],
+                      })
+                      results.push({ status: 'success' as const, result })
+                    } catch (err) {
+                      results.push({ status: 'failure' as const, error: err })
+                    }
+                  }
+                }
               }
               
               results.forEach((result, index) => {
                 if (result.status === 'success' && result.result) {
                   const owner = typeof result.result === 'string' ? result.result.toLowerCase() : String(result.result).toLowerCase()
-                  const marketplace = CONTRACT_ADDRESSES.NFT_MARKETPLACE.toLowerCase()
+                  const marketplace = contractAddresses.NFT_MARKETPLACE.toLowerCase()
                   
                   if (owner === marketplace) {
                     // Check if already in nfts array (from events)
@@ -358,28 +443,24 @@ export function ListMarketplaceNFTs() {
             
               try {
               const calls = batch.map((nft) => ({
-                address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+                address: contractAddresses.NFT_MARKETPLACE,
                 abi: NFT_MARKETPLACE_ABI,
                 functionName: 'getListing',
                 args: [nft.collectionAddress, nft.tokenId],
               }))
-              
+
               let results: Array<{ status: 'success' | 'failure'; result?: unknown; error?: unknown }>
-              try {
-                results = await publicClient.multicall({ contracts: calls })
-              } catch (multicallErr: unknown) {
-                // If multicall fails, fall back to individual calls
-                const errorMessage = multicallErr instanceof Error ? multicallErr.message : String(multicallErr)
-                console.warn('Multicall failed, using individual calls:', errorMessage)
+
+              // Skip multicall for Flow testnet (chainId 545) as it doesn't support it
+              if (chainId === 545) {
                 results = []
-                
                 for (let j = 0; j < batch.length; j++) {
                   if (j > 0) {
                     await delay(100)
                   }
                   try {
                     const result = await publicClient.readContract({
-                      address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+                      address: contractAddresses.NFT_MARKETPLACE,
                       abi: NFT_MARKETPLACE_ABI,
                       functionName: 'getListing',
                       args: [batch[j].collectionAddress, batch[j].tokenId],
@@ -389,8 +470,34 @@ export function ListMarketplaceNFTs() {
                     results.push({ status: 'failure' as const, error: err })
                   }
                 }
+              } else {
+                try {
+                  results = await publicClient.multicall({ contracts: calls })
+                } catch (multicallErr: unknown) {
+                  // If multicall fails, fall back to individual calls
+                  const errorMessage = multicallErr instanceof Error ? multicallErr.message : String(multicallErr)
+                  console.warn('Multicall failed, using individual calls:', errorMessage)
+                  results = []
+
+                  for (let j = 0; j < batch.length; j++) {
+                    if (j > 0) {
+                      await delay(100)
+                    }
+                    try {
+                      const result = await publicClient.readContract({
+                        address: contractAddresses.NFT_MARKETPLACE,
+                        abi: NFT_MARKETPLACE_ABI,
+                        functionName: 'getListing',
+                        args: [batch[j].collectionAddress, batch[j].tokenId],
+                      })
+                      results.push({ status: 'success' as const, result })
+                    } catch (err) {
+                      results.push({ status: 'failure' as const, error: err })
+                    }
+                  }
+                }
               }
-              
+
               results.forEach((result, index) => {
                 if (result.status === 'success' && result.result) {
                   // getListing returns a struct object: { seller, paymentToken, price, isActive }
@@ -459,14 +566,14 @@ export function ListMarketplaceNFTs() {
     } finally {
       setIsLoading(false)
     }
-  }, [publicClient])
+  }, [publicClient, chainId, contractAddresses])
 
   const handleListNFT = async () => {
     if (!selectedNFT || !price || parseFloat(price) <= 0) return
     
     try {
       await writeContract({
-        address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+        address: contractAddresses.NFT_MARKETPLACE,
         abi: NFT_MARKETPLACE_ABI,
         functionName: 'listOwnedNFT',
         args: [
@@ -510,7 +617,7 @@ export function ListMarketplaceNFTs() {
           // First, check if already listed (double-check before listing)
           try {
             const listingCheck = await publicClient?.readContract({
-              address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+              address: contractAddresses.NFT_MARKETPLACE,
               abi: NFT_MARKETPLACE_ABI,
               functionName: 'getListing',
               args: [nft.collectionAddress, nft.tokenId],
@@ -538,7 +645,7 @@ export function ListMarketplaceNFTs() {
           }
           
           await writeContract({
-            address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+            address: contractAddresses.NFT_MARKETPLACE,
             abi: NFT_MARKETPLACE_ABI,
             functionName: 'listOwnedNFT',
             args: [
@@ -812,6 +919,8 @@ function NFTCard({
   const { buyNFT, hash, isPending, isConfirming, isSuccess, error } = useBuyNFT()
   const { address, isConnected } = useAccount()
   const publicClient = usePublicClient()
+  const chainId = useChainId()
+  const contractAddresses = getContractAddresses(chainId)
 
   // Verify ownership after purchase
   const { data: ownerAfterPurchase } = useReadContract({
@@ -867,7 +976,7 @@ function NFTCard({
       // Double-check the actual listing price from the contract before buying
       if (publicClient) {
         const actualListing = await publicClient.readContract({
-          address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+          address: contractAddresses.NFT_MARKETPLACE,
           abi: NFT_MARKETPLACE_ABI,
           functionName: 'getListing',
           args: [nft.collectionAddress, nft.tokenId],

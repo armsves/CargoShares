@@ -1,14 +1,21 @@
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useWatchContractEvent, useChainId } from 'wagmi'
-import { CONTRACT_ADDRESSES, NFT_COLLECTION_FACTORY_ABI, NFT_MARKETPLACE_ABI, NFT_COLLECTION_ABI } from '@/config/contracts'
+import { getContractAddresses, NFT_COLLECTION_FACTORY_ABI, NFT_MARKETPLACE_ABI, NFT_COLLECTION_ABI } from '@/config/contracts'
 import { parseEther, formatEther } from 'viem'
 
 // Hedera chain IDs: Testnet = 296, Mainnet = 295
 const HEDERA_CHAIN_IDS = [296, 295]
 
+// Hook to get network-aware contract addresses
+export function useContractAddresses() {
+  const chainId = useChainId()
+  return getContractAddresses(chainId)
+}
+
 // Hook to get creation fee
 export function useCreationFee() {
+  const contractAddresses = useContractAddresses()
   const { data, isLoading, error } = useReadContract({
-    address: CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY as `0x${string}`,
+    address: contractAddresses.NFT_COLLECTION_FACTORY,
     abi: NFT_COLLECTION_FACTORY_ABI,
     functionName: 'creationFee',
   })
@@ -22,8 +29,9 @@ export function useCreationFee() {
 
 // Hook to get collections count
 export function useCollectionsCount() {
+  const contractAddresses = useContractAddresses()
   const { data, isLoading, error, refetch } = useReadContract({
-    address: CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY as `0x${string}`,
+    address: contractAddresses.NFT_COLLECTION_FACTORY,
     abi: NFT_COLLECTION_FACTORY_ABI,
     functionName: 'getCollectionsCount',
   })
@@ -38,8 +46,9 @@ export function useCollectionsCount() {
 
 // Hook to get a collection by index
 export function useCollection(index: number) {
+  const contractAddresses = useContractAddresses()
   const { data, isLoading, error } = useReadContract({
-    address: CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY as `0x${string}`,
+    address: contractAddresses.NFT_COLLECTION_FACTORY,
     abi: NFT_COLLECTION_FACTORY_ABI,
     functionName: 'getCollection',
     args: [BigInt(index)],
@@ -64,6 +73,7 @@ export function useCollection(index: number) {
 
 // Hook to create a collection
 export function useCreateCollection() {
+  const contractAddresses = useContractAddresses()
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
@@ -75,20 +85,20 @@ export function useCreateCollection() {
     baseURI: string,
     mintCount?: number
   ) => {
-    if (!CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY) {
+    if (!contractAddresses.NFT_COLLECTION_FACTORY) {
       throw new Error('NFT Collection Factory address not set')
     }
 
     if (mintCount !== undefined && mintCount > 0) {
       return writeContract({
-        address: CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY as `0x${string}`,
+        address: contractAddresses.NFT_COLLECTION_FACTORY,
         abi: NFT_COLLECTION_FACTORY_ABI,
         functionName: 'createCollectionWithMint',
         args: [name, symbol, baseURI, BigInt(mintCount)],
       })
     } else {
       return writeContract({
-        address: CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY as `0x${string}`,
+        address: contractAddresses.NFT_COLLECTION_FACTORY,
         abi: NFT_COLLECTION_FACTORY_ABI,
         functionName: 'createCollection',
         args: [name, symbol, baseURI],
@@ -108,8 +118,9 @@ export function useCreateCollection() {
 
 // Hook to get marketplace listing
 export function useMarketplaceListing(nftContract: `0x${string}` | undefined, tokenId: bigint | undefined) {
+  const contractAddresses = useContractAddresses()
   const { data, isLoading, error, refetch } = useReadContract({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+    address: contractAddresses.NFT_MARKETPLACE,
     abi: NFT_MARKETPLACE_ABI,
     functionName: 'getListing',
     args: nftContract && tokenId !== undefined ? [nftContract, tokenId] : undefined,
@@ -133,6 +144,7 @@ export function useMarketplaceListing(nftContract: `0x${string}` | undefined, to
 
 // Hook to list an NFT
 export function useListNFT() {
+  const contractAddresses = useContractAddresses()
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
@@ -143,12 +155,12 @@ export function useListNFT() {
     tokenId: bigint,
     price: string // Price in ETH
   ) => {
-    if (!CONTRACT_ADDRESSES.NFT_MARKETPLACE) {
+    if (!contractAddresses.NFT_MARKETPLACE) {
       throw new Error('Marketplace address not set')
     }
 
     return writeContract({
-      address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+      address: contractAddresses.NFT_MARKETPLACE,
       abi: NFT_MARKETPLACE_ABI,
       functionName: 'list',
       args: [nftContract, tokenId, '0x0000000000000000000000000000000000000000' as `0x${string}`, parseEther(price)],
@@ -167,6 +179,7 @@ export function useListNFT() {
 
 // Hook to buy an NFT
 export function useBuyNFT() {
+  const contractAddresses = useContractAddresses()
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
@@ -174,13 +187,13 @@ export function useBuyNFT() {
   const chainId = useChainId()
 
   const buyNFT = (nftContract: `0x${string}`, tokenId: bigint, price: string | bigint) => {
-    if (!CONTRACT_ADDRESSES.NFT_MARKETPLACE) {
+    if (!contractAddresses.NFT_MARKETPLACE) {
       throw new Error('Marketplace address not set')
     }
 
     // Handle both string (ETH format) and bigint (wei format)
     const value = typeof price === 'bigint' ? price : parseEther(price)
-    
+
     console.log('buyNFT called:', {
       nftContract,
       tokenId: tokenId.toString(),
@@ -193,7 +206,7 @@ export function useBuyNFT() {
     })
 
     return writeContract({
-      address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+      address: contractAddresses.NFT_MARKETPLACE,
       abi: NFT_MARKETPLACE_ABI,
       functionName: 'buy',
       args: [nftContract, tokenId],
@@ -213,18 +226,19 @@ export function useBuyNFT() {
 
 // Hook to cancel a listing
 export function useCancelListing() {
+  const contractAddresses = useContractAddresses()
   const { writeContract, data: hash, isPending, error } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
   })
 
   const cancelListing = (nftContract: `0x${string}`, tokenId: bigint) => {
-    if (!CONTRACT_ADDRESSES.NFT_MARKETPLACE) {
+    if (!contractAddresses.NFT_MARKETPLACE) {
       throw new Error('Marketplace address not set')
     }
 
     return writeContract({
-      address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+      address: contractAddresses.NFT_MARKETPLACE,
       abi: NFT_MARKETPLACE_ABI,
       functionName: 'cancelListing',
       args: [nftContract, tokenId],
@@ -243,8 +257,10 @@ export function useCancelListing() {
 
 // Hook to watch marketplace events
 export function useWatchMarketplaceEvents() {
+  const contractAddresses = useContractAddresses()
+
   useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+    address: contractAddresses.NFT_MARKETPLACE,
     abi: NFT_MARKETPLACE_ABI,
     eventName: 'Listed',
     onLogs(logs) {
@@ -253,7 +269,7 @@ export function useWatchMarketplaceEvents() {
   })
 
   useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+    address: contractAddresses.NFT_MARKETPLACE,
     abi: NFT_MARKETPLACE_ABI,
     eventName: 'Purchased',
     onLogs(logs) {
@@ -262,7 +278,7 @@ export function useWatchMarketplaceEvents() {
   })
 
   useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+    address: contractAddresses.NFT_MARKETPLACE,
     abi: NFT_MARKETPLACE_ABI,
     eventName: 'Cancelled',
     onLogs(logs) {
