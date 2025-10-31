@@ -1,0 +1,37 @@
+{
+  "name": "shipshares-contracts",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:hedera:testnet": "tsx scripts/deploy-hedera.ts hederaTestnet",
+    "deploy:hedera:mainnet": "tsx scripts/deploy-hedera.ts hederaMainnet",
+    "deploy:flow:testnet": "tsx scripts/deploy-flow.ts flowTestnet",
+    "deploy:flow:mainnet": "tsx scripts/deploy-flow.ts flowMainnet",
+    "setup:hedera:testnet": "tsx scripts/setup-factory.ts hederaTestnet",
+    "setup:hedera:mainnet": "tsx scripts/setup-factory.ts hederaMainnet",
+    "setup:flow:testnet": "tsx scripts/setup-factory.ts flowTestnet",
+    "setup:flow:mainnet": "tsx scripts/setup-factory.ts flowMainnet"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ignition": "^3.0.3",
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-verify": "^3.0.4",
+    "@types/chai": "^4.3.20",
+    "@types/chai-as-promised": "^8.0.2",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.18.12",
+    "chai": "^5.3.3",
+    "ethers": "^6.15.0",
+    "forge-std": "github:foundry-rs/forge-std#v1.9.4",
+    "hardhat": "^3.0.9",
+    "mocha": "^11.7.4",
+    "tsx": "^4.7.0",
+    "typescript": "~5.8.0"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0",
+    "dotenv": "^16.6.1"
+  }
+}
