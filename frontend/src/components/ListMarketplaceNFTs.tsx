@@ -100,7 +100,7 @@ export function ListMarketplaceNFTs() {
         const marketplaceAddress = contractAddresses.NFT_MARKETPLACE
         const marketplaceAddressLower = marketplaceAddress.toLowerCase()
 
-        let transferLogs: any[] = []
+        let transferLogs: Awaited<ReturnType<typeof publicClient.getLogs>> = []
         try {
           transferLogs = await publicClient.getLogs({
             address: collectionAddress,
@@ -119,10 +119,11 @@ export function ListMarketplaceNFTs() {
               to: marketplaceAddress,
             },
           })
-        } catch (error: any) {
-          console.warn('Failed to fetch Transfer events in one request:', error.message)
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          console.warn('Failed to fetch Transfer events in one request:', errorMessage)
           // If the range is too large, try with an even smaller range
-          if (error.message?.includes('limited to') || error.message?.includes('413')) {
+          if (errorMessage.includes('limited to') || errorMessage.includes('413')) {
             const smallerFromBlock = currentBlock > BigInt(2000) ? currentBlock - BigInt(2000) : BigInt(0)
             console.log('Retrying with smaller block range:', smallerFromBlock.toString(), 'to latest')
             try {
@@ -143,8 +144,9 @@ export function ListMarketplaceNFTs() {
                   to: marketplaceAddress,
                 },
               })
-            } catch (retryError: any) {
-              console.warn('Retry also failed:', retryError.message)
+            } catch (retryError: unknown) {
+              const retryErrorMessage = retryError instanceof Error ? retryError.message : String(retryError)
+              console.warn('Retry also failed:', retryErrorMessage)
               transferLogs = []
             }
           }

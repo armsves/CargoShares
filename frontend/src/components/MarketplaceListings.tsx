@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { usePublicClient, useWatchContractEvent, useChainId } from 'wagmi'
 import { useBuyNFT } from '@/hooks/useContracts'
-import { CONTRACT_ADDRESSES, NFT_MARKETPLACE_ABI } from '@/config/contracts'
+import { getContractAddresses, NFT_MARKETPLACE_ABI } from '@/config/contracts'
 import { formatEther, decodeEventLog } from 'viem'
 
 interface Listing {
@@ -19,10 +19,11 @@ export function Marketplace() {
   const [isLoading, setIsLoading] = useState(true)
   const publicClient = usePublicClient()
   const chainId = useChainId()
+  const contractAddresses = getContractAddresses(chainId)
 
   // Fetch listings from events
   const fetchListings = useCallback(async () => {
-    if (!publicClient || !CONTRACT_ADDRESSES.NFT_MARKETPLACE) {
+    if (!publicClient || !contractAddresses.NFT_MARKETPLACE) {
       setIsLoading(false)
       return
     }
@@ -37,10 +38,10 @@ export function Marketplace() {
 
       console.log('Fetching marketplace listings from block:', fromBlock.toString(), 'to latest (max', maxBlocks.toString(), 'blocks)')
 
-      let logs: any[] = []
+      let logs: Awaited<ReturnType<typeof publicClient.getLogs>> = []
       try {
         logs = await publicClient.getLogs({
-          address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+          address: contractAddresses.NFT_MARKETPLACE,
           event: {
             type: 'event',
             name: 'Listed',
@@ -55,15 +56,16 @@ export function Marketplace() {
           fromBlock: fromBlock,
           toBlock: 'latest',
         })
-      } catch (error: any) {
-        console.warn('Failed to fetch Listed events in one request:', error.message)
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        console.warn('Failed to fetch Listed events in one request:', errorMessage)
         // If the range is too large, try with an even smaller range
-        if (error.message?.includes('limited to') || error.message?.includes('413')) {
+        if (errorMessage.includes('limited to') || errorMessage.includes('413')) {
           const smallerFromBlock = currentBlock > BigInt(2000) ? currentBlock - BigInt(2000) : BigInt(0)
           console.log('Retrying with smaller block range:', smallerFromBlock.toString(), 'to latest')
           try {
             logs = await publicClient.getLogs({
-              address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+              address: contractAddresses.NFT_MARKETPLACE,
               event: {
                 type: 'event',
                 name: 'Listed',
@@ -78,8 +80,9 @@ export function Marketplace() {
               fromBlock: smallerFromBlock,
               toBlock: 'latest',
             })
-          } catch (retryError: any) {
-            console.warn('Retry also failed:', retryError.message)
+          } catch (retryError: unknown) {
+            const retryErrorMessage = retryError instanceof Error ? retryError.message : String(retryError)
+            console.warn('Retry also failed:', retryErrorMessage)
             logs = []
           }
         }
@@ -129,7 +132,7 @@ export function Marketplace() {
         try {
           // Use multicall to batch requests
           const calls = batch.map((event) => ({
-            address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+            address: contractAddresses.NFT_MARKETPLACE,
             abi: NFT_MARKETPLACE_ABI,
             functionName: 'getListing',
             args: [event.nftContract, event.tokenId],
@@ -147,7 +150,7 @@ export function Marketplace() {
               }
               try {
                 const result = await publicClient.readContract({
-                  address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+                  address: contractAddresses.NFT_MARKETPLACE,
                   abi: NFT_MARKETPLACE_ABI,
                   functionName: 'getListing',
                   args: [batch[j].nftContract, batch[j].tokenId],
@@ -178,7 +181,7 @@ export function Marketplace() {
                 }
                 try {
                   const result = await publicClient.readContract({
-                    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+                    address: contractAddresses.NFT_MARKETPLACE,
                     abi: NFT_MARKETPLACE_ABI,
                     functionName: 'getListing',
                     args: [batch[j].nftContract, batch[j].tokenId],
@@ -221,11 +224,11 @@ export function Marketplace() {
     } finally {
       setIsLoading(false)
     }
-  }, [publicClient])
+  }, [publicClient, chainId, contractAddresses])
 
   // Watch for new listings
   useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+    address: contractAddresses.NFT_MARKETPLACE,
     abi: NFT_MARKETPLACE_ABI,
     eventName: 'Listed',
     onLogs() {
@@ -234,7 +237,7 @@ export function Marketplace() {
   })
 
   useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+    address: contractAddresses.NFT_MARKETPLACE,
     abi: NFT_MARKETPLACE_ABI,
     eventName: 'Purchased',
     onLogs() {
@@ -243,7 +246,7 @@ export function Marketplace() {
   })
 
   useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
+    address: contractAddresses.NFT_MARKETPLACE,
     abi: NFT_MARKETPLACE_ABI,
     eventName: 'Cancelled',
     onLogs() {
