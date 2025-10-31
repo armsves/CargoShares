@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useReadContract } from 'wagmi'
 import { useCollectionsCount, useCollection, useBuyNFT } from '@/hooks/useContracts'
 import { CONTRACT_ADDRESSES, NFT_COLLECTION_ABI, NFT_MARKETPLACE_ABI } from '@/config/contracts'
@@ -55,7 +55,7 @@ export function ListMarketplaceNFTs() {
     (marketplaceOwner as string).toLowerCase() === address.toLowerCase()
 
   // Fetch NFTs owned by marketplace for a collection
-  const fetchMarketplaceNFTs = async (collectionAddress: `0x${string}`) => {
+  const fetchMarketplaceNFTs = useCallback(async (collectionAddress: `0x${string}`) => {
     if (!publicClient) return
     
     setIsLoading(true)
@@ -133,9 +133,9 @@ export function ListMarketplaceNFTs() {
               topics: log.topics,
             })
             
-            const decodedArgs = decoded.args as any
+            const decodedArgs = decoded.args as { to?: string; tokenId?: bigint }
             const toAddress = decodedArgs.to?.toLowerCase()
-            const tokenId = BigInt(decodedArgs.tokenId.toString())
+            const tokenId = decodedArgs.tokenId ? BigInt(decodedArgs.tokenId.toString()) : BigInt(0)
             
             // Double-check that 'to' matches marketplace
             if (toAddress === marketplaceAddressLower && tokenId < BigInt(maxTokens)) {
@@ -171,12 +171,13 @@ export function ListMarketplaceNFTs() {
                 args: [collectionAddress, tokenId],
               }))
               
-              let results: any[]
+              let results: Array<{ status: 'success' | 'failure'; result?: unknown; error?: unknown }>
               try {
                 results = await publicClient.multicall({ contracts: calls })
-              } catch (multicallErr: any) {
+              } catch (multicallErr: unknown) {
                 // If multicall fails (e.g., chain doesn't support it), fall back to individual calls
-                console.warn('Multicall failed, using individual calls:', multicallErr.message)
+                const errorMessage = multicallErr instanceof Error ? multicallErr.message : String(multicallErr)
+                console.warn('Multicall failed, using individual calls:', errorMessage)
                 results = []
                 
                 // Call each contract individually with delays
@@ -202,7 +203,12 @@ export function ListMarketplaceNFTs() {
                 if (result.status === 'success' && result.result) {
                   // getListing returns a struct object: { seller, paymentToken, price, isActive }
                   // viem/wagmi converts tuples to objects
-                  const listing = result.result as any
+                  const listing = result.result as { isActive: boolean; price?: bigint; seller?: string; paymentToken?: string } | null
+                  
+                  if (!listing) {
+                    return
+                  }
+                  
                   const isActive = listing.isActive === true
                   
                   // Handle price conversion - viem might return it as bigint, string, or number
@@ -216,7 +222,7 @@ export function ListMarketplaceNFTs() {
                       priceBigInt = BigInt(listing.price)
                     } else {
                       // Try to convert anyway
-                      priceBigInt = BigInt(listing.price.toString())
+                      priceBigInt = BigInt(String(listing.price))
                     }
                   }
                   
@@ -278,12 +284,13 @@ export function ListMarketplaceNFTs() {
                 args: [BigInt(tokenId)],
               }))
               
-              let results: any[]
+              let results: Array<{ status: 'success' | 'failure'; result?: unknown; error?: unknown }>
               try {
                 results = await publicClient.multicall({ contracts: calls })
-              } catch (multicallErr: any) {
+              } catch (multicallErr: unknown) {
                 // If multicall fails, fall back to individual calls
-                console.warn('Multicall failed, using individual calls:', multicallErr.message)
+                const errorMessage = multicallErr instanceof Error ? multicallErr.message : String(multicallErr)
+                console.warn('Multicall failed, using individual calls:', errorMessage)
                 results = []
                 
                 for (let j = 0; j < batch.length; j++) {
@@ -357,12 +364,13 @@ export function ListMarketplaceNFTs() {
                 args: [nft.collectionAddress, nft.tokenId],
               }))
               
-              let results: any[]
+              let results: Array<{ status: 'success' | 'failure'; result?: unknown; error?: unknown }>
               try {
                 results = await publicClient.multicall({ contracts: calls })
-              } catch (multicallErr: any) {
+              } catch (multicallErr: unknown) {
                 // If multicall fails, fall back to individual calls
-                console.warn('Multicall failed, using individual calls:', multicallErr.message)
+                const errorMessage = multicallErr instanceof Error ? multicallErr.message : String(multicallErr)
+                console.warn('Multicall failed, using individual calls:', errorMessage)
                 results = []
                 
                 for (let j = 0; j < batch.length; j++) {
@@ -387,7 +395,12 @@ export function ListMarketplaceNFTs() {
                 if (result.status === 'success' && result.result) {
                   // getListing returns a struct object: { seller, paymentToken, price, isActive }
                   // viem/wagmi converts tuples to objects
-                  const listing = result.result as any
+                  const listing = result.result as { isActive: boolean; price?: bigint; seller?: string; paymentToken?: string } | null
+                  
+                  if (!listing) {
+                    return
+                  }
+                  
                   const isActive = listing.isActive === true
                   
                   // Handle price conversion - viem might return it as bigint, string, or number
@@ -401,7 +414,7 @@ export function ListMarketplaceNFTs() {
                       priceBigInt = BigInt(listing.price)
                     } else {
                       // Try to convert anyway
-                      priceBigInt = BigInt(listing.price.toString())
+                      priceBigInt = BigInt(String(listing.price))
                     }
                   }
                   
@@ -446,7 +459,7 @@ export function ListMarketplaceNFTs() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [publicClient])
 
   const handleListNFT = async () => {
     if (!selectedNFT || !price || parseFloat(price) <= 0) return
@@ -508,7 +521,8 @@ export function ListMarketplaceNFTs() {
             console.log(`Pre-check token ${nft.tokenId}:`, listingCheck, 'type:', typeof listingCheck)
             
             if (listingCheck && typeof listingCheck === 'object' && 'isActive' in listingCheck) {
-              const isActive = (listingCheck as any).isActive === true
+              const listingCheckTyped = listingCheck as { isActive?: boolean } | null
+              const isActive = listingCheckTyped?.isActive === true
               console.log(`Pre-check token ${nft.tokenId}: isActive:`, isActive)
               if (isActive === true) {
                 console.log(`Token ${nft.tokenId.toString()} is already listed, skipping`)
@@ -543,17 +557,19 @@ export function ListMarketplaceNFTs() {
           
           // Wait for transaction to be sent before next one
           await delay(1500) // 1.5 second delay between transactions
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error(`Failed to list token ${nft.tokenId}:`, err)
           
           // If it's an "Already listed" error, skip it
-          if (err?.message?.includes('Already listed') || err?.message?.includes('already listed')) {
+          const errorMessage = err instanceof Error ? err.message : String(err)
+          if (errorMessage.includes('Already listed') || errorMessage.includes('already listed')) {
             skipCount++
             continue
           }
           
           // For other errors, stop batch listing
-          alert(`Error listing token ${nft.tokenId}: ${err.message || 'Unknown error'}. Stopping batch listing.`)
+          const finalErrorMessage = err instanceof Error ? err.message : 'Unknown error'
+          alert(`Error listing token ${nft.tokenId}: ${finalErrorMessage}. Stopping batch listing.`)
           break
         }
       }
@@ -586,7 +602,7 @@ export function ListMarketplaceNFTs() {
         fetchMarketplaceNFTs(selectedCollection)
       }
     }
-  }, [isSuccess, selectedNFT, selectedCollection])
+  }, [isSuccess, selectedNFT, selectedCollection, fetchMarketplaceNFTs])
 
   return (
     <div className="space-y-6">
@@ -689,7 +705,7 @@ export function ListMarketplaceNFTs() {
               {isBatchListing && (
                 <div className="bg-blue-50 p-4 rounded-lg mb-4">
                   <p className="text-blue-800 text-sm">
-                    ⏳ Batch listing NFTs... This may take a moment. Please don't close this page.
+                    ⏳ Batch listing NFTs... This may take a moment. Please don&apos;t close this page.
                   </p>
                   {batchListHash && (
                     <p className="text-blue-700 text-xs mt-1">
@@ -857,7 +873,8 @@ function NFTCard({
           args: [nft.collectionAddress, nft.tokenId],
         })
         
-        const actualPrice = (actualListing as any).price
+        const listingTyped = actualListing as { price?: bigint } | null
+        const actualPrice = listingTyped?.price
         console.log('Actual listing price from contract:', {
           storedPrice: nft.listingPrice.toString(),
           contractPrice: actualPrice?.toString(),
@@ -867,7 +884,7 @@ function NFTCard({
         
         // Use the actual price from contract to ensure exact match
         if (actualPrice) {
-          const priceBigInt = typeof actualPrice === 'bigint' ? actualPrice : BigInt(actualPrice.toString())
+          const priceBigInt = typeof actualPrice === 'bigint' ? actualPrice : BigInt(String(actualPrice))
           await buyNFT(nft.collectionAddress, nft.tokenId, priceBigInt)
         } else {
           await buyNFT(nft.collectionAddress, nft.tokenId, nft.listingPrice as bigint)
@@ -875,9 +892,10 @@ function NFTCard({
       } else {
         await buyNFT(nft.collectionAddress, nft.tokenId, nft.listingPrice as bigint)
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Purchase failed'
       console.error('Purchase failed:', err)
-      alert(err.message || 'Purchase failed')
+      alert(errorMessage)
     }
   }
 

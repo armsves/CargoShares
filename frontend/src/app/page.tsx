@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
 import { useCreationFee, useCollectionsCount, useCollection, useCreateCollection, useNFTCollection } from '@/hooks/useContracts'
-import { CONTRACT_ADDRESSES } from '@/config/contracts'
 import { Header } from '@/components/Header'
 import { Footer } from '@/components/Footer'
 import { Marketplace } from '@/components/MarketplaceListings'
@@ -13,7 +12,7 @@ import { SetupMarketplace } from '@/components/SetupMarketplace'
 type Tab = 'home' | 'marketplace' | 'collections' | 'create' | 'setup'
 
 export default function MainApp() {
-  const { address, isConnected } = useAccount()
+  const { isConnected } = useAccount()
   const [activeTab, setActiveTab] = useState<Tab>('home')
   
   // Collection creation form state
@@ -56,8 +55,9 @@ export default function MainApp() {
 
     try {
       await createCollection(name.trim(), symbol.trim(), baseURI.trim(), mintCountNum)
-    } catch (err: any) {
-      setCreateError(err.message || 'Failed to create collection')
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create collection'
+      setCreateError(errorMessage)
     }
   }
 
@@ -119,11 +119,7 @@ export default function MainApp() {
               <div className="flex gap-4 overflow-x-auto">
                 <button
                   onClick={() => setActiveTab('home')}
-                  className={`px-4 py-2 font-medium whitespace-nowrap ${
-                    activeTab === 'home'
-                      ? 'border-b-2 border-[#0A2463] text-[#0A2463]'
-                      : 'text-[#6B7280] hover:text-[#0A2463]'
-                  }`}
+                  className="px-4 py-2 font-medium whitespace-nowrap text-[#6B7280] hover:text-[#0A2463]"
                 >
                   Home
                 </button>
@@ -393,7 +389,7 @@ export default function MainApp() {
 
 function FeaturedShipCard({ index, onNavigateToMarketplace }: { index: number; onNavigateToMarketplace: () => void }) {
   const { collection, isLoading } = useCollection(index)
-  const { name, symbol, totalSupply } = useNFTCollection(
+  const { totalSupply } = useNFTCollection(
     collection?.collectionAddress ? collection.collectionAddress : undefined
   )
 

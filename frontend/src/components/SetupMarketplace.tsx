@@ -1,13 +1,11 @@
 'use client'
 
-import { useState } from 'react'
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { CONTRACT_ADDRESSES, NFT_COLLECTION_FACTORY_ABI, NFT_MARKETPLACE_ABI } from '@/config/contracts'
 import { formatEther } from 'viem'
 
 export function SetupMarketplace() {
   const { address, isConnected } = useAccount()
-  const [isSetting, setIsSetting] = useState(false)
   
   const marketplaceAddress = CONTRACT_ADDRESSES.NFT_MARKETPLACE
   const factoryAddress = CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY
@@ -53,18 +51,16 @@ export function SetupMarketplace() {
     }
 
     try {
-      setIsSetting(true)
       await writeContract({
         address: CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY,
         abi: NFT_COLLECTION_FACTORY_ABI,
         functionName: 'setMarketplaceAddress',
         args: [marketplaceAddress],
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
       console.error('Failed to set marketplace:', err)
-      alert(`Failed: ${err.message || 'Unknown error'}`)
-    } finally {
-      setIsSetting(false)
+      alert(`Failed: ${errorMessage}`)
     }
   }
 
@@ -88,18 +84,16 @@ export function SetupMarketplace() {
     }
 
     try {
-      setIsSetting(true)
       await writeContract({
         address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
         abi: NFT_MARKETPLACE_ABI,
         functionName: 'setAuthorizedLister',
         args: [factoryAddress as `0x${string}`, true],
       })
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error'
       console.error('Failed to authorize factory:', err)
-      alert(`Failed: ${err.message || 'Unknown error'}`)
-    } finally {
-      setIsSetting(false)
+      alert(`Failed: ${errorMessage}`)
     }
   }
 

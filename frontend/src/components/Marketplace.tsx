@@ -2,10 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
-import { useListNFT, useCancelListing } from '@/hooks/useContracts'
+import { useListNFT } from '@/hooks/useContracts'
 import { NFT_COLLECTION_ABI, CONTRACT_ADDRESSES } from '@/config/contracts'
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
-import { formatEther } from 'viem'
 
 interface ListNFTFormProps {
   nftContract: `0x${string}`
@@ -30,7 +29,7 @@ export function ListNFTForm({ nftContract, tokenId, onSuccess }: ListNFTFormProp
     address: nftContract,
     abi: NFT_COLLECTION_ABI,
     functionName: 'isApprovedForAll',
-    args: address ? [address, CONTRACT_ADDRESSES.NFT_MARKETPLACE] : undefined,
+    args: address ? [address, CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`] : undefined,
     query: {
       enabled: !!address && !!CONTRACT_ADDRESSES.NFT_MARKETPLACE,
     },
@@ -54,7 +53,7 @@ export function ListNFTForm({ nftContract, tokenId, onSuccess }: ListNFTFormProp
         address: nftContract,
         abi: NFT_COLLECTION_ABI,
         functionName: 'setApprovalForAll',
-        args: [CONTRACT_ADDRESSES.NFT_MARKETPLACE, true],
+        args: [CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`, true],
       })
       // Refetch approval status after a delay
       setTimeout(() => {

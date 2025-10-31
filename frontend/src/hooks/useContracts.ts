@@ -2,20 +2,6 @@ import { useReadContract, useWriteContract, useWaitForTransactionReceipt, useWat
 import { CONTRACT_ADDRESSES, NFT_COLLECTION_FACTORY_ABI, NFT_MARKETPLACE_ABI, NFT_COLLECTION_ABI } from '@/config/contracts'
 import { parseEther, formatEther } from 'viem'
 
-// Hedera chain IDs: Testnet = 296, Mainnet = 295
-const HEDERA_CHAIN_IDS = [296, 295]
-
-// Convert price from 18 decimals (wei) to 8 decimals (tinybar) for Hedera
-function convertToHederaFormat(priceWei: bigint): bigint {
-  // Hedera's native HBAR uses 8 decimals, but EVM compatibility uses 18 decimals
-  // However, msg.value on Hedera might use 8 decimals (tinybar)
-  // Convert from 18 decimals (wei) to 8 decimals (tinybar) by dividing by 10^10
-  // 0.01 ether (18 decimals) = 10000000000000000 wei
-  // 0.01 HBAR (8 decimals) = 1000000 tinybar
-  // So we need to divide by 10^10
-  return priceWei / BigInt(10 ** 10)
-}
-
 // Hook to get creation fee
 export function useCreationFee() {
   const { data, isLoading, error } = useReadContract({

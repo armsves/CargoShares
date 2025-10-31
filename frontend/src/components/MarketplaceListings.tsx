@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { usePublicClient, useWatchContractEvent } from 'wagmi'
 import { useBuyNFT } from '@/hooks/useContracts'
 import { CONTRACT_ADDRESSES, NFT_MARKETPLACE_ABI } from '@/config/contracts'
-import { formatEther } from 'viem'
+import { formatEther, decodeEventLog } from 'viem'
 
 interface Listing {
   nftContract: `0x${string}`
@@ -34,7 +34,7 @@ export function Marketplace() {
       
       // Query Listed events
       const logs = await publicClient.getLogs({
-        address: CONTRACT_ADDRESSES.NFT_MARKETPLACE,
+        address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
         event: {
           type: 'event',
           name: 'Listed',
@@ -46,7 +46,7 @@ export function Marketplace() {
             { indexed: false, name: 'price', type: 'uint256' },
           ],
         },
-        fromBlock: fromBlock > 0 ? fromBlock : 0n,
+        fromBlock: fromBlock > 0 ? fromBlock : BigInt(0),
         toBlock: 'latest',
       })
 
@@ -58,19 +58,22 @@ export function Marketplace() {
       
       for (const log of logs) {
         try {
-          const decoded = publicClient.decodeEventLog({
+          const decoded = decodeEventLog({
             abi: NFT_MARKETPLACE_ABI,
             data: log.data,
             topics: log.topics,
           })
           
-          const { nftContract, tokenId, seller, price } = decoded.args as any
-          decodedEvents.push({
-            nftContract: nftContract as `0x${string}`,
-            tokenId: BigInt(tokenId.toString()),
-            seller: seller as `0x${string}`,
-            price: BigInt(price.toString()),
-          })
+          const args = decoded.args as { nftContract?: string; tokenId?: bigint; seller?: string; price?: bigint }
+          const { nftContract, tokenId, seller, price } = args
+          if (nftContract && tokenId && seller && price) {
+            decodedEvents.push({
+              nftContract: nftContract as `0x${string}`,
+              tokenId: BigInt(tokenId.toString()),
+              seller: seller as `0x${string}`,
+              price: BigInt(price.toString()),
+            })
+          }
         } catch (err) {
           console.warn('Error decoding listing log:', err)
         }
@@ -91,18 +94,24 @@ export function Marketplace() {
         try {
           // Use multicall to batch requests
           const calls = batch.map((event) => ({
-            address: CONTRACT_ADDRESSES.NFT_MARKETPLACE,
+            address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
             abi: NFT_MARKETPLACE_ABI,
             functionName: 'getListing',
             args: [event.nftContract, event.tokenId],
           }))
           
-          let results: any[]
+          let results: Array<{ status: 'success' | 'failure'; result?: unknown; error?: Error }>
           try {
-            results = await publicClient.multicall({ contracts: calls })
-          } catch (multicallErr: any) {
+            const multicallResults = await publicClient.multicall({ contracts: calls })
+            results = multicallResults.map((r: { status?: 'success' | 'failure'; result?: unknown; error?: Error }) => ({
+              status: r.status || 'success',
+              result: r.result,
+              error: r.error,
+            }))
+          } catch (multicallErr: unknown) {
             // If multicall fails (e.g., chain doesn't support it), fall back to individual calls
-            console.warn('Multicall failed, using individual calls:', multicallErr.message)
+            const errorMessage = multicallErr instanceof Error ? multicallErr.message : String(multicallErr)
+            console.warn('Multicall failed, using individual calls:', errorMessage)
             results = []
             const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
             
@@ -112,14 +121,14 @@ export function Marketplace() {
               }
               try {
                 const result = await publicClient.readContract({
-                  address: CONTRACT_ADDRESSES.NFT_MARKETPLACE,
+                  address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
                   abi: NFT_MARKETPLACE_ABI,
                   functionName: 'getListing',
                   args: [batch[j].nftContract, batch[j].tokenId],
                 })
                 results.push({ status: 'success' as const, result })
               } catch (err) {
-                results.push({ status: 'failure' as const, error: err })
+                results.push({ status: 'failure' as const, error: err instanceof Error ? err : new Error(String(err)) })
               }
             }
           }
@@ -228,7 +237,7 @@ export function Marketplace() {
 }
 
 function ListingCard({ listing }: { listing: Listing }) {
-  const { buyNFT, hash, isPending, isConfirming, isSuccess, error } = useBuyNFT()
+  const { buyNFT, isPending, isConfirming, isSuccess, error } = useBuyNFT()
 
   const handleBuy = async () => {
     try {

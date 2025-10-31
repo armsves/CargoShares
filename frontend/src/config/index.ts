@@ -65,16 +65,18 @@ export const wagmiAdapter = new WagmiAdapter({
   queryClientConfig: {
     defaultOptions: {
       queries: {
-        retry: (failureCount, error: any) => {
+        retry: (failureCount, error: unknown) => {
           // Don't retry on 429 errors immediately - wait longer
-          if (error?.status === 429 || error?.message?.includes('429')) {
+          const errorObj = error as { status?: number; message?: string } | null
+          if (errorObj?.status === 429 || errorObj?.message?.includes('429')) {
             return failureCount < 2 // Only retry twice for rate limits
           }
           return failureCount < 3
         },
-        retryDelay: (attemptIndex, error: any) => {
+        retryDelay: (attemptIndex, error: unknown) => {
           // Exponential backoff, longer delay for rate limits
-          if (error?.status === 429 || error?.message?.includes('429')) {
+          const errorObj = error as { status?: number; message?: string } | null
+          if (errorObj?.status === 429 || errorObj?.message?.includes('429')) {
             return Math.min(1000 * 2 ** attemptIndex * 5, 30000) // 5s, 10s, 20s max
           }
           return Math.min(1000 * 2 ** attemptIndex, 30000)

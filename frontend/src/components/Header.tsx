@@ -2,6 +2,7 @@
 
 import { ConnectButton } from '@/components/ConnectButton'
 import Image from 'next/image'
+import Link from 'next/link'
 import { useState, useEffect } from 'react'
 
 export function Header() {
@@ -27,7 +28,7 @@ export function Header() {
       <nav className="h-full max-w-[1280px] mx-auto px-4 md:px-12 flex items-center justify-between">
         {/* Left: Logo */}
         <div className="flex items-center gap-3">
-          <a href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+          <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
             <div className="relative h-10 w-10">
               <Image
                 src="/CargoShares-logo.png"
@@ -40,7 +41,7 @@ export function Header() {
             <span className="text-white font-bold text-lg">
               CargoShares
             </span>
-          </a>
+          </Link>
         </div>
 
         {/* Center: Navigation Links */}
