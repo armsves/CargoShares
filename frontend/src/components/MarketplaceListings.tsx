@@ -134,11 +134,14 @@ export function Marketplace() {
           }
           
           results.forEach((result, index) => {
-            if (result.status === 'success' && result.result && result.result.isActive) {
-              activeListings.push({
-                ...batch[index],
-                isActive: true,
-              })
+            if (result.status === 'success' && result.result) {
+              const listingResult = result.result as { isActive?: boolean }
+              if (listingResult.isActive) {
+                activeListings.push({
+                  ...batch[index],
+                  isActive: true,
+                })
+              }
             }
           })
         } catch (err) {
@@ -164,7 +167,7 @@ export function Marketplace() {
 
   // Watch for new listings
   useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE,
+    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
     abi: NFT_MARKETPLACE_ABI,
     eventName: 'Listed',
     onLogs() {
@@ -173,7 +176,7 @@ export function Marketplace() {
   })
 
   useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE,
+    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
     abi: NFT_MARKETPLACE_ABI,
     eventName: 'Purchased',
     onLogs() {
@@ -182,7 +185,7 @@ export function Marketplace() {
   })
 
   useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE,
+    address: CONTRACT_ADDRESSES.NFT_MARKETPLACE as `0x${string}`,
     abi: NFT_MARKETPLACE_ABI,
     eventName: 'Cancelled',
     onLogs() {

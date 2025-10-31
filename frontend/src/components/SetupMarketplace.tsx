@@ -52,10 +52,10 @@ export function SetupMarketplace() {
 
     try {
       await writeContract({
-        address: CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY,
+        address: CONTRACT_ADDRESSES.NFT_COLLECTION_FACTORY as `0x${string}`,
         abi: NFT_COLLECTION_FACTORY_ABI,
         functionName: 'setMarketplaceAddress',
-        args: [marketplaceAddress],
+        args: [marketplaceAddress as `0x${string}`],
       })
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error'
